@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CASEFILE — Case 014: The Midnight Query</title>
+<meta name="description" content="A SQL detective game. Query a real database to solve a murder.">
+<style>:root{--night-ink:#12100f;--wall:#1b1714;--wall-raised:#26201b;--desk:#38271d;--wood-edge:#513a2a;--cork:#79563b;--cork-light:#956b49;--paper:#eee2cb;--paper-shadow:#cdbb9d;--ink:#2a2119;--amber:#e4aa58;--lamp:#ffd38a;--rust:#a7473d;--terminal-green:#a6c39a;--verified:#9eaf85;--text:#f1e6d5;--muted:#b9a88f;
+--display:"Rockwell","Bookman Old Style","Georgia",serif;--ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{background:var(--night-ink)}
+body{margin:0;color:var(--text);font:16px/1.5 var(--ui);min-height:100vh;background:var(--wall)}
+.room{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(255,211,138,.22),transparent 70%),radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.65) 100%),linear-gradient(180deg,var(--wall) 0,var(--wall) 55%,var(--desk) 55%,#2a1c14 100%)}
+.room::after{content:"";position:absolute;inset:0;opacity:.05;background-image:repeating-radial-gradient(circle at 20% 30%,#fff 0 1px,transparent 1px 3px)}
+button{font:inherit;cursor:pointer}
+a{color:var(--amber)}
+:focus-visible{outline:3px solid var(--lamp);outline-offset:2px}
+[hidden]{display:none!important}
+.view{max-width:1280px;margin:0 auto;padding:24px 20px 64px}
+.status{font:600 .8rem var(--mono);letter-spacing:.18em;color:var(--amber);margin:0 0 8px}
+/* poppy titles */
+.pop,.pop span{font-family:var(--display);text-transform:uppercase;line-height:.95;margin:0}
+h1.pop{font-size:clamp(2.8rem,10vw,7.5rem)}
+h1.pop span{display:block;animation:rise .7s cubic-bezier(.2,.9,.3,1.2) both}
+h1.pop .l2{color:var(--amber);animation-delay:.18s;position:relative;width:max-content}
+h1.pop .l2::after{content:"";position:absolute;left:0;bottom:-.06em;height:.08em;width:100%;background:var(--rust);transform-origin:left;animation:sweep .6s .7s ease-out both}
+h2.pop{font-size:clamp(1.8rem,5vw,3rem);animation:rise .5s both}
+@keyframes rise{from{opacity:0;transform:translateY(24px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes sweep{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes stamp{0%{opacity:0;transform:scale(2.2) rotate(-12deg)}60%{opacity:1;transform:scale(.94) rotate(-4deg)}100%{opacity:1;transform:scale(1) rotate(-6deg)}}
+@keyframes slide{from{opacity:0;transform:translateY(-18px) rotate(-3deg)}to{opacity:1;transform:rotate(var(--r,0deg))}}
+@keyframes drawn{to{stroke-dashoffset:0}}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(167,71,61,.5)}}
+#landing{min-height:80vh;display:flex;flex-direction:column;justify-content:center;gap:14px}
+.sub{font-size:1.15rem;max-width:36em;color:var(--text)}
+.micro{font:.75rem var(--mono);letter-spacing:.14em;color:var(--muted)}
+.tag{font:italic 1rem var(--display);color:var(--muted);border-left:3px solid var(--rust);padding-left:12px;max-width:34em}
+.cta{background:var(--amber);color:var(--night-ink);border:0;padding:14px 26px;font:700 1rem var(--mono);letter-spacing:.1em;border-radius:3px;box-shadow:0 4px 0 #8a5f22;width:max-content;transition:transform .12s}
+.cta:hover:not(:disabled){transform:translateY(-2px)}.cta:disabled{opacity:.5;cursor:wait}
+.cta.sm{padding:9px 16px;font-size:.85rem}
+.ghost{background:transparent;color:var(--text);border:1px solid var(--wood-edge);padding:8px 12px;border-radius:3px;font:.8rem var(--mono)}
+.ghost:hover{border-color:var(--amber)}
+/* header */
+#top{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:10px 20px;background:rgba(18,16,15,.9);border-bottom:2px solid var(--wood-edge);position:sticky;top:0;z-index:5}
+.brand{font:700 1.2rem var(--display);letter-spacing:.12em;color:var(--amber)}
+#meter{display:flex;gap:8px;list-style:none;margin:0 auto 0 0;padding:0;flex-wrap:wrap}
+#meter li{font:.68rem var(--mono);padding:4px 8px;border:1px dashed var(--wood-edge);color:var(--muted)}
+#meter li.done{color:var(--verified);border:2px solid var(--verified);transform:rotate(-2deg);animation:stamp .4s both}
+#meter li.now{border-color:var(--amber);color:var(--amber)}
+.stamp-sm{font:700 .75rem var(--mono);color:var(--rust);border:2px solid var(--rust);padding:3px 8px;transform:rotate(-3deg);background:rgba(238,226,203,.9)}
+/* folder, paper */
+.folder{background:linear-gradient(#d9b877,#c9a560);color:var(--ink);padding:28px;border-radius:4px 14px 4px 4px;box-shadow:0 18px 40px rgba(0,0,0,.6);max-width:900px;margin:20px auto;animation:rise .45s both}
+.folder .status{color:var(--rust)}
+.paper{background:var(--paper);color:var(--ink);padding:16px 18px;border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,.45);margin:0 0 16px}
+.paper h3,.paper summary{font:700 1rem var(--display);letter-spacing:.06em;margin:0 0 8px}
+.paper summary{cursor:pointer}.paper small{font:.72rem var(--mono);color:#6b5a46;font-weight:400}
+.note{background:#f6e88f;color:#4b3f1a;padding:10px 14px;transform:rotate(-1deg);font:700 .95rem "Segoe Print","Bradley Hand",cursive;width:max-content;max-width:100%;margin:14px 0;box-shadow:2px 4px 8px rgba(0,0,0,.3)}
+.dossiers,#suspects{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0}
+.dos{background:var(--paper);border:1px solid var(--paper-shadow);padding:10px;position:relative;box-shadow:0 3px 8px rgba(0,0,0,.3);color:var(--ink)}
+.dos .ini{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--ink);color:var(--paper);font:700 1rem var(--display)}
+.dos b{display:block;margin-top:6px}.dos small{color:#6b5a46;display:block}
+.dos.locked{opacity:.7;filter:grayscale(.6)}.dos.out{border-color:var(--rust)}
+.dos label{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:.85rem}
+/* office */
+#office{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px}
+@media(max-width:900px){#office{grid-template-columns:1fr}#strings{display:none}}
+#tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+#tabs button{background:var(--wall-raised);color:var(--muted);border:1px solid var(--wood-edge);border-bottom:0;padding:8px 12px;font:.75rem var(--mono);border-radius:6px 6px 0 0}
+#tabs button[aria-selected=true]{background:var(--paper);color:var(--ink);font-weight:700;border-color:var(--amber)}
+#tabs button.done::after{content:" ✔";color:var(--verified)}
+#mission .lab{font:.72rem var(--mono);letter-spacing:.14em;color:var(--rust);margin:0}
+#mission h2{font:700 clamp(1.5rem,4vw,2.2rem) var(--display);margin:2px 0 8px;animation:rise .35s both}
+#mission p{margin:6px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chips button{background:#fff8e6;border:1px solid var(--paper-shadow);padding:4px 9px;font:.78rem var(--mono);color:var(--ink);border-radius:2px}
+.chips button.seen{background:#dfe8cc;border-color:var(--verified)}
+.chips button.on{outline:2px solid var(--amber)}
+table{border-collapse:collapse;font:.8rem var(--mono);width:100%}
+th,td{border:1px solid var(--paper-shadow);padding:3px 6px;text-align:left;vertical-align:top}
+th{background:var(--paper-shadow)}
+.fk{color:var(--rust);cursor:pointer;background:none;border:0;font:inherit;text-decoration:underline;padding:0}
+.terminal{background:#15110e;border:2px solid var(--wood-edge);border-radius:6px;padding:14px;box-shadow:inset 0 0 40px rgba(0,0,0,.6)}
+.lbl{display:block;font:700 .75rem var(--mono);color:var(--terminal-green);letter-spacing:.12em;margin-bottom:6px}.lbl small{color:var(--muted);letter-spacing:0;font-weight:400}
+textarea{width:100%;background:#0e0b09;color:var(--terminal-green);border:1px solid var(--wood-edge);border-radius:3px;padding:10px;font:.92rem/1.5 var(--mono);resize:vertical;tab-size:2}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.stat{font:.75rem var(--mono);color:var(--amber);margin-left:auto}
+.stat.err{color:#e07a6e}
+.hint{background:#2a2119;border-left:3px solid var(--amber);padding:8px 12px;font-size:.9rem;margin:0 0 10px}
+.out{max-height:340px;overflow:auto;background:var(--paper);color:var(--ink);padding:0}
+.out:empty{display:none}
+.out .meta{font:.72rem var(--mono);padding:6px 8px;background:var(--paper-shadow)}
+.out .err{padding:12px;color:var(--muted);background:#2a1512;color:#f0b4ab;font:.85rem var(--mono);white-space:pre-wrap}
+.out tbody tr{animation:rise .25s both}
+td.hl{background:rgba(228,170,88,.45);font-weight:700}
+.read{margin:12px 0 0;border-left:5px solid var(--rust)}
+.read.ok{border-left-color:var(--verified)}
+.read .stampt{display:inline-block;font:700 .9rem var(--mono);color:var(--rust);border:3px solid var(--rust);padding:2px 10px;animation:stamp .45s both;margin-bottom:6px}
+.read.ok .stampt{color:#4f6a2f;border-color:#4f6a2f}
+.read em{display:block;color:#6b5a46;margin-top:6px}
+/* board */
+.boardcol{position:sticky;top:64px;align-self:start;max-height:calc(100vh - 80px);overflow:auto}
+@media(max-width:900px){.boardcol{position:static;max-height:none}}
+.ticker{font:.8rem var(--mono);color:var(--lamp);border-left:3px solid var(--amber);padding:4px 10px;margin:0 0 12px}
+.cork{background:var(--cork);background-image:radial-gradient(rgba(0,0,0,.18) 1px,transparent 1.5px),radial-gradient(rgba(255,255,255,.08) 1px,transparent 1.5px);background-size:6px 6px,9px 9px;border:12px solid var(--wood-edge);box-shadow:inset 0 0 30px rgba(0,0,0,.55),0 10px 24px rgba(0,0,0,.5);padding:12px;margin-bottom:16px;min-height:200px}
+.cork h3{margin:0 0 10px;font:700 .8rem var(--mono);letter-spacing:.2em;color:#f3dcb2}
+#board{position:relative}
+#strings{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
+#strings path{stroke:var(--rust);stroke-width:2.5;fill:none;stroke-dasharray:1000;stroke-dashoffset:1000;animation:drawn 1s .35s forwards}
+#slips{display:flex;flex-direction:column;gap:22px;position:relative}
+.slip{background:var(--paper);color:var(--ink);padding:14px 12px 10px;box-shadow:0 5px 10px rgba(0,0,0,.5);width:92%;transform:rotate(var(--r,0deg));animation:slide .5s both;position:relative;z-index:2}
+.slip:nth-child(odd){--r:-1.2deg;align-self:flex-start}.slip:nth-child(even){--r:1.2deg;align-self:flex-end}
+.slip::before{content:"";position:absolute;top:-7px;left:50%;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e57368,var(--rust) 60%,#5a1f1a);box-shadow:0 3px 3px rgba(0,0,0,.5)}
+.slip .tag2{font:700 .7rem var(--mono);color:var(--rust);letter-spacing:.12em}
+.slip .src{font:.68rem var(--mono);color:#6b5a46}.slip p{margin:4px 0;font-size:.9rem}
+.slip.pulse{animation:slide .5s both,pulse 1s .5s 2}
+.empty{color:#f3dcb2;font:italic .95rem var(--display)}
+fieldset{border:1px dashed var(--paper-shadow);margin:10px 0;padding:8px}
+fieldset label{display:block;font-size:.88rem}
+.verdict{font-weight:600;margin:10px 0 0}.verdict.bad{color:var(--rust)}.verdict.good{color:#3f5a22}
+.stamp-big{font:700 clamp(2.4rem,9vw,5rem) var(--display);color:var(--rust);border:6px solid var(--rust);width:max-content;padding:4px 24px;transform:rotate(-6deg);animation:stamp .7s both;margin:30px 0 16px;background:rgba(238,226,203,.92)}
+#closed .slip{width:100%;max-width:560px;align-self:auto;margin:20px 0}
+.toast{position:fixed;right:16px;bottom:56px;z-index:9;background:var(--paper);color:var(--ink);padding:10px 16px;border-left:6px solid var(--rust);font:700 .85rem var(--mono);animation:slide .4s both;box-shadow:0 8px 20px rgba(0,0,0,.6)}
+.credit{font-size:.72rem;color:var(--muted);text-align:center;padding:14px;max-width:900px;margin:0 auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}#strings path{stroke-dashoffset:0}}
+
+/* ===== VISUAL PASS 2: materials, light, depth ===== */
+:root{--hand:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;--paper-grain:repeating-linear-gradient(0deg,rgba(120,90,50,.035) 0 1px,transparent 1px 3px)}
+body{background:#14100d}
+.room{background:
+ radial-gradient(ellipse 38% 46% at 50% 0%,rgba(255,211,138,.32),rgba(255,180,90,.08) 55%,transparent 75%),
+ radial-gradient(ellipse at 50% 55%,transparent 40%,rgba(0,0,0,.72) 100%),
+ repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 2px,transparent 2px 46px),
+ linear-gradient(180deg,#221a15 0,#1a1410 52%,#3b281c 52%,#2b1c13 58%,#22160f 100%)}
+.room::before{content:"";position:absolute;left:0;right:0;top:52%;height:6px;background:linear-gradient(#6a4a33,#3b281c);box-shadow:0 8px 24px rgba(0,0,0,.7)}
+.room::after{opacity:.07;animation:grain 6s steps(6) infinite}
+@keyframes grain{to{transform:translate(-3%,2%)}}
+
+/* landing scene */
+#landing{position:relative;isolation:isolate;padding-left:clamp(20px,6vw,90px)}
+.deco{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.wallboard{position:absolute;right:3%;top:6%;width:min(52vw,620px);aspect-ratio:4/3;background:var(--cork);background-image:radial-gradient(rgba(0,0,0,.2) 1px,transparent 1.5px),radial-gradient(rgba(255,255,255,.1) 1px,transparent 1.5px);background-size:6px 6px,10px 10px;border:14px solid #4a3324;border-image:linear-gradient(135deg,#6a4a33,#3a271b) 1;box-shadow:inset 0 0 50px rgba(0,0,0,.65),0 20px 50px rgba(0,0,0,.7);filter:blur(1.2px) brightness(.8);opacity:.9;transform:rotate(1.5deg)}
+.wallboard svg{position:absolute;inset:0;width:100%;height:100%}
+.wallboard path{stroke:var(--rust);stroke-width:2;fill:none;stroke-dasharray:600;stroke-dashoffset:600;animation:drawn 2.2s .9s forwards}
+.lampcone{position:absolute;inset:-30% -10% auto -10%;height:140%;background:radial-gradient(ellipse at 50% 0,rgba(255,211,138,.28),transparent 65%);animation:breathe 5s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.65}}
+.ghost-slip{position:absolute;background:var(--paper);color:var(--ink);padding:8px 10px;font:.62rem var(--mono);box-shadow:0 4px 8px rgba(0,0,0,.55);width:30%}
+.ghost-slip b{display:block;color:var(--rust);letter-spacing:.1em;margin-bottom:3px}
+.ghost-slip::before{content:"";position:absolute;top:-6px;left:50%;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e57368,var(--rust) 60%,#5a1f1a)}
+.g1{left:8%;top:10%;transform:rotate(-4deg)}.g2{left:52%;top:12%;transform:rotate(3deg)}.g3{left:60%;top:56%;transform:rotate(-2deg)}.g4{left:12%;top:58%;transform:rotate(4deg)}
+.lamp{position:absolute;left:50%;top:-8%;width:70vw;height:70vh;transform:translateX(-50%);background:radial-gradient(ellipse at 50% 0,rgba(255,211,138,.14),transparent 62%)}
+.coffee{position:absolute;right:12%;bottom:6%;width:64px;height:64px;border-radius:50%;border:5px solid rgba(90,55,25,.35);box-shadow:inset 0 0 6px rgba(90,55,25,.3);opacity:.7}
+#landing>*:not(.deco){position:relative}
+.status{display:flex;align-items:center;gap:8px;text-shadow:0 0 12px rgba(228,170,88,.5)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--rust);box-shadow:0 0 8px var(--rust);animation:breathe 1.6s infinite}
+h1.pop{text-shadow:0 4px 0 rgba(0,0,0,.5),0 0 40px rgba(228,170,88,.15);letter-spacing:-.01em;color:#f6ead3}
+h1.pop .l2{text-shadow:0 4px 0 #6b3d14,0 0 30px rgba(228,170,88,.45);-webkit-text-stroke:1px rgba(0,0,0,.2)}
+.cta{background:linear-gradient(#f0bd6a,var(--amber) 60%,#c98f3f);border:1px solid #8a5f22;box-shadow:0 5px 0 #8a5f22,0 10px 22px rgba(0,0,0,.5),0 0 24px rgba(228,170,88,.25)}
+.cta:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 #8a5f22}
+.tag{background:linear-gradient(90deg,rgba(167,71,61,.12),transparent)}
+
+/* paper + folder */
+.paper,.slip,.dos,.ghost-slip{background-image:var(--paper-grain);background-color:var(--paper)}
+.paper{border:1px solid rgba(120,90,50,.25);border-radius:2px 2px 6px 2px;box-shadow:0 1px 0 #fff6 inset,0 10px 22px rgba(0,0,0,.5)}
+.paper::after{content:"";display:block;clear:both}
+.folder{position:relative;margin-top:44px;background:linear-gradient(135deg,rgba(255,255,255,.1),transparent 40%),linear-gradient(#dcbb7c,#c6a15c);border:1px solid #8f6e38}
+.folder::before{content:"CASE 014";position:absolute;top:-30px;left:30px;background:#dcbb7c;color:var(--rust);font:700 .8rem var(--mono);letter-spacing:.18em;padding:6px 20px;border-radius:8px 8px 0 0;border:1px solid #8f6e38;border-bottom:0}
+.folder::after{content:"CONFIDENTIAL";position:absolute;top:22px;right:24px;font:700 .8rem var(--mono);letter-spacing:.2em;color:var(--rust);border:3px double var(--rust);padding:2px 10px;transform:rotate(7deg);opacity:.55}
+.folder p{max-width:62ch}
+.note{font-family:var(--hand);background:linear-gradient(#f9ee9c,#f1df78);box-shadow:3px 6px 10px rgba(0,0,0,.35);position:relative}
+.note::before{content:"";position:absolute;top:-6px;left:50%;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e57368,var(--rust) 60%,#5a1f1a)}
+.dos{border-radius:2px;transition:transform .2s}.dos:hover{transform:translateY(-3px) rotate(-.6deg)}
+.dos.locked{background-image:repeating-linear-gradient(135deg,rgba(0,0,0,.05) 0 6px,transparent 6px 12px)}
+.dos.locked .ini{background:#6b5a46}
+.dos::before{content:"";position:absolute;top:-5px;right:14px;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e57368,var(--rust) 60%,#5a1f1a)}
+
+/* sticky header = desk edge */
+#top{background:linear-gradient(#2a1f17,#17120e);border-bottom:3px solid #513a2a;box-shadow:0 6px 18px rgba(0,0,0,.6)}
+.brand{text-shadow:0 0 14px rgba(228,170,88,.5)}
+
+/* office: file-tab missions, terminal, board */
+#tabs button{border-radius:8px 8px 0 0;background:linear-gradient(#35291f,#251c15);transition:transform .15s,color .15s;position:relative;top:2px}
+#tabs button:hover{color:var(--lamp);transform:translateY(-2px)}
+#tabs button[aria-selected=true]{background:linear-gradient(#f3e7cf,var(--paper));top:0;box-shadow:0 -4px 10px rgba(0,0,0,.4)}
+#mission{border-top-left-radius:0;position:relative;overflow:hidden}
+#mission::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:repeating-linear-gradient(180deg,var(--rust) 0 10px,transparent 10px 14px)}
+#mission>*{margin-left:8px}
+#mission .lab{display:inline-block;background:var(--rust);color:var(--paper);padding:2px 8px;letter-spacing:.12em}
+.terminal{position:relative;background:linear-gradient(#17120e,#0f0c0a);border:3px solid #513a2a;border-radius:10px;box-shadow:inset 0 0 50px rgba(0,0,0,.8),0 0 0 1px #000,0 12px 30px rgba(0,0,0,.6),0 0 40px rgba(166,195,154,.06)}
+.terminal::before{content:"";position:absolute;inset:0;border-radius:8px;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(166,195,154,.045) 0 1px,transparent 1px 3px)}
+textarea{text-shadow:0 0 6px rgba(166,195,154,.4);caret-color:var(--lamp);background:#0b0907}
+textarea:focus{outline:none;border-color:var(--terminal-green);box-shadow:0 0 0 2px rgba(166,195,154,.25),0 0 18px rgba(166,195,154,.18)}
+.out{border-radius:3px;box-shadow:0 6px 16px rgba(0,0,0,.5);background-image:var(--paper-grain)}
+.out tbody tr:nth-child(even){background:rgba(120,90,50,.08)}
+.out th{position:sticky;top:0;background:#cdbb9d;letter-spacing:.05em}
+.stat::before{content:"● ";font-size:.6rem}
+.read{box-shadow:0 8px 20px rgba(0,0,0,.5),inset 0 0 0 1px rgba(120,90,50,.2);position:relative}
+.read .stampt{box-shadow:inset 0 0 0 1px currentColor;mix-blend-mode:multiply;border-radius:3px;font-size:1rem;letter-spacing:.08em;transform:rotate(-3deg)}
+.chips button{background-image:var(--paper-grain);box-shadow:0 2px 0 rgba(0,0,0,.25);transition:transform .12s}
+.chips button:hover{transform:translateY(-2px)}
+.cork{border-image:linear-gradient(135deg,#7a573b,#3a271b 50%,#5c4130) 1;border-width:14px;background-color:var(--cork);box-shadow:inset 0 0 40px rgba(0,0,0,.65),0 14px 30px rgba(0,0,0,.6),0 0 0 2px #1a110b}
+.cork h3{font:700 .85rem var(--display);letter-spacing:.3em;text-align:center;color:#f8e3b8;text-shadow:0 2px 3px rgba(0,0,0,.6);border-bottom:2px dashed rgba(248,227,184,.3);padding-bottom:6px}
+.slip{border-radius:1px;box-shadow:0 1px 0 #fff7 inset,0 8px 12px rgba(0,0,0,.5)}
+.slip::after{content:"";position:absolute;right:0;bottom:0;border:9px solid transparent;border-right-color:rgba(0,0,0,.18);border-bottom-color:rgba(0,0,0,.18)}
+.slip .tag2{display:inline-block;border-bottom:2px solid var(--amber)}
+.slip p{font-family:var(--hand);font-size:.88rem;line-height:1.4}
+#strings path{filter:drop-shadow(1px 3px 2px rgba(0,0,0,.5));stroke-linecap:round}
+.ticker{background:linear-gradient(90deg,rgba(228,170,88,.15),transparent);padding:8px 12px;letter-spacing:.05em}
+.toast{border-radius:2px;background-image:var(--paper-grain);transform-origin:right bottom}
+.stamp-big{border-radius:6px;box-shadow:inset 0 0 0 3px var(--paper),inset 0 0 0 5px var(--rust);mix-blend-mode:normal}
+#closed{text-align:center;display:flex;flex-direction:column;align-items:center}
+#meter li.done{background:rgba(158,175,133,.12)}
+.credit{opacity:.8}
+::selection{background:var(--amber);color:var(--night-ink)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#6a4a33;border-radius:5px}::-webkit-scrollbar-track{background:#1a1410}
+@media(max-width:900px){.wallboard{width:90vw;right:-10%;top:2%;opacity:.45}.folder::after{display:none}}
+@media(prefers-reduced-motion:reduce){.room::after,.lampcone,.dot{animation:none}.wallboard path{stroke-dashoffset:0}}
+</style>
+</head>
+<body>
+<div class="room" aria-hidden="true"></div>
+
+<header id="top" hidden>
+  <b class="brand">CASEFILE</b>
+  <ol id="meter" aria-label="Case progress"></ol>
+  <span id="rank" class="stamp-sm"></span>
+  <button id="reset" class="ghost" title="Clear all progress">RESET CASE</button>
+</header>
+
+<main>
+<section id="landing" class="view">
+  <div class="deco" aria-hidden="true">
+    <div class="wallboard"><i class="lampcone"></i>
+      <div class="ghost-slip g1"><b>SUSPECT A</b><span>alibi: "offline by 9"</span></div>
+      <div class="ghost-slip g2"><b>TIMELINE</b><span>11:47 ▮▮▮▮ ??:??</span></div>
+      <div class="ghost-slip g3"><b>SELECT *</b><span>FROM witness<br>WHERE saw = 'it'</span></div>
+      <div class="ghost-slip g4"><b>ACCESS LOG</b><span>48Z55 · 01-09</span></div>
+      <svg viewBox="0 0 400 300" preserveAspectRatio="none"><path d="M70 60 Q150 120 250 70"/><path d="M250 70 Q300 150 330 210"/><path d="M70 60 Q60 160 110 220"/></svg>
+    </div>
+    <div class="lamp"></div><div class="coffee"></div>
+  </div>
+  <p class="status"><span class="dot"></span>CASEFILE &nbsp;·&nbsp; CASE 014 / UNRESOLVED</p>
+  <h1 class="pop"><span class="l1">THE MIDNIGHT</span><span class="l2">QUERY</span></h1>
+  <p class="sub">Four suspects. Conflicting alibis. A digital trail buried in the records.</p>
+  <button id="open" class="cta">OPEN CASE FILE →</button>
+  <p class="micro">SQL FORENSICS · REAL DATABASE · EVERY RECORD LEAVES A TRACE</p>
+  <p class="tag">Every record leaves a trace. Every suspect has a story. Find the truth.</p>
+</section>
+
+<section id="briefing" class="view" hidden>
+  <div class="folder">
+    <p class="status">CASE 014 · UNRESOLVED</p>
+    <h2 class="pop">THE MIDNIGHT QUERY</h2>
+    <p>There has been a <b>murder</b> in <b>SQL City</b>, on <b>January 15, 2018</b>. The detective has the case but lost the crime scene report. All that remains is the police department's database: ten thousand people, gym check-ins, driver's licenses, interviews.</p>
+    <p>You are the apprentice. SQL is your only instrument. Every clue you earn goes on the board, and only evidence can close the case.</p>
+    <div class="note">YOUR JOB: verify every claim against the record.</div>
+    <div class="dossiers" id="briefDossiers"></div>
+    <button id="begin" class="cta">BEGIN INVESTIGATION</button>
+  </div>
+</section>
+
+<section id="office" class="view" hidden>
+  <div class="desk">
+    <nav id="tabs" aria-label="Leads"></nav>
+    <article id="mission" class="paper"></article>
+
+    <details id="indexBox" class="paper" open>
+      <summary>FILE INDEX <small>(live schema of the database)</small></summary>
+      <div id="tables" class="chips"></div>
+      <div id="schemaView" aria-live="polite"></div>
+    </details>
+
+    <div class="terminal">
+      <label for="sql" class="lbl">SQL TERMINAL <small>Ctrl/Cmd + Enter to run · one read-only statement per run</small></label>
+      <textarea id="sql" spellcheck="false" rows="7"></textarea>
+      <div class="actions">
+        <button id="run" class="cta sm" disabled>RUN QUERY</button>
+        <button id="again" class="ghost">RESET QUERY</button>
+        <button id="hint" class="ghost">HINT</button>
+        <span id="status" role="status" class="stat">LOADING DATABASE…</span>
+      </div>
+      <p id="hintBox" class="hint" hidden></p>
+      <div id="out" class="out"></div>
+      <div id="reading" class="paper read" hidden></div>
+    </div>
+  </div>
+
+  <aside class="boardcol">
+    <p id="ticker" class="ticker">NO DISCOVERIES YET. RUN A QUERY.</p>
+    <div class="cork"><h3>EVIDENCE BOARD</h3>
+      <div id="board"><svg id="strings" aria-hidden="true"></svg><div id="slips"></div></div>
+    </div>
+    <div class="paper" id="verdictBox">
+      <h3>MAKE THE CALL</h3>
+      <div id="suspects"></div>
+      <fieldset id="attach"><legend>Attach supporting evidence</legend></fieldset>
+      <button id="accuse" class="cta sm">SUBMIT ACCUSATION</button>
+      <p id="verdictMsg" class="verdict" role="status"></p>
+    </div>
+  </aside>
+</section>
+
+<section id="closed" class="view" hidden>
+  <div class="stamp-big">CASE CLOSED</div>
+  <h2 class="pop">THE MASTERMIND</h2>
+  <p id="closedMsg" class="sub"></p>
+  <div id="closedSlips"></div>
+  <button id="replay" class="ghost">BACK TO THE BOARD</button>
+</section>
+</main>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<footer class="credit">Built on <a href="https://github.com/NUKnightLab/sql-mysteries">SQL Murder Mystery</a> by Joon Park &amp; Cathy He (Knight Lab). Code MIT; story and data CC BY-SA 4.0. SQL runs locally via SQL.js. <a href="classic.html">Original version</a></footer>
+
+
+<div id="pv" style="position:fixed;z-index:20;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:6px;background:#000c;padding:6px;border-radius:6px"><button class="ghost" data-v="landing">LANDING</button><button class="ghost" data-v="briefing">BRIEFING</button><button class="ghost" data-v="office">OFFICE</button><button class="ghost" data-v="closed">CASE CLOSED</button></div><p style="position:fixed;z-index:20;left:8px;top:8px;margin:0;font:.65rem monospace;color:#b9a88f;background:#000a;padding:3px 6px">VISUAL PREVIEW · sample state, rows from the real database</p><script>/* CASEFILE core: case data + validation. No DOM. Single source of truth. */
+(function (root) {
+  'use strict';
+  const cell = c => String(c);
+  const any = (row, f) => row.some(c => f(cell(c)));
+  const has = (rows, f) => rows.some(r => any(r, f));
+  const eq = v => c => c === v;
+
+  const EVIDENCE = {
+    E1: { tag: 'CRIME SCENE REPORT', src: 'crime_scene_report · 2018-01-15 · SQL City',
+      text: 'Murder in SQL City. Two witnesses on file: the last house on Northwestern Dr, and a woman named Annabel on Franklin Ave.' },
+    E2: { tag: 'WITNESS STATEMENTS', src: 'person ⨝ interview',
+      text: 'Morty Schapiro saw a man with a "Get Fit Now" gold-member bag (membership "48Z…") enter a car with plate "H42W". Annabel Miller recognised the killer from the gym on January 9.' },
+    E3: { tag: 'THE GUNMAN', src: 'get_fit_now_member ⨝ person ⨝ drivers_license ⨝ get_fit_now_check_in',
+      text: 'Jeremy Bowers: gold member 48Z55, plate 0H42W2, checked in on 2018-01-09. Fits both witnesses. His own statement says he was hired.' },
+    E4: { tag: 'THE MASTERMIND', src: 'drivers_license ⨝ person ⨝ facebook_event_checkin',
+      text: 'Miranda Priestly: red hair, Tesla Model S, 66 in, three SQL Symphony Concert check-ins in Dec 2017. She alone fits all of Bowers\u2019 description.' }
+  };
+  const LINKS = [['E1', 'E2', 'names the witnesses'], ['E2', 'E3', 'identifies the gunman'], ['E3', 'E4', 'his statement points up']];
+
+  const BEATS = [
+    { id: 'B1', label: 'LEAD 01 / NARROW THE FIELD', title: 'THE LOST REPORT', ev: 'E1', needs: [],
+      q: 'A murder happened in SQL City on Jan 15, 2018. Which crime scene report describes it?',
+      why: 'The detective lost the report. It is the only place the witnesses are mentioned.',
+      start: "SELECT *\n  FROM crime_scene_report\n WHERE type = 'murder'",
+      hints: ['NUDGE 1 \u2014 crime_scene_report has date, type and city columns.', 'NUDGE 2 \u2014 dates are stored as integers like 20180115. Add conditions with AND.', 'FIELD NOTE \u2014 WHERE filters rows before you read them. More conditions, fewer rows.'],
+      learn: 'SELECT chooses the columns you want to see. WHERE narrows the rows to the condition you are investigating.',
+      doubt: 'This report is a lead, not proof of guilt.',
+      check: r => r.rows.length <= 10 && has(r.rows, c => /Security footage/.test(c)) },
+    { id: 'B2', label: 'LEAD 02 / CONNECT THE DOTS', title: 'TWO WITNESSES, TWO TABLES', ev: 'E2', needs: ['E1'],
+      q: 'Find both witnesses and read what each told the police.',
+      why: 'person holds names and addresses; interview holds transcripts. Only person_id connects them.',
+      start: "SELECT p.name, i.transcript\n  FROM person p\n  JOIN interview i ON i.person_id = p.id\n WHERE p.address_street_name = 'Franklin Ave'",
+      hints: ['NUDGE 1 \u2014 One witness lives at the highest house number on Northwestern Dr.', 'NUDGE 2 \u2014 The other is named Annabel. LIKE \'Annabel%\' matches a first name.', 'FIELD NOTE \u2014 JOIN ... ON matches rows through a shared key. Combine two conditions with OR.'],
+      learn: 'JOIN combines rows from related tables through a shared key, so one record gains context from another.',
+      doubt: 'Witnesses can be mistaken. Their claims still have to be checked against records.',
+      check: r => r.rows.length <= 10 &&
+        r.rows.some(w => any(w, eq('Morty Schapiro')) && any(w, c => /gunshot/.test(c))) &&
+        r.rows.some(w => any(w, eq('Annabel Miller')) && any(w, c => /January the 9th/.test(c))) },
+    { id: 'B3', label: 'LEAD 03 / READ THE FILE INDEX', title: 'READ THE FILE INDEX', ev: null, needs: [],
+      q: 'Before the next query: how do the gym, license and person tables connect?',
+      why: 'Foreign keys are the strings that tie separate records into one story.',
+      start: "SELECT name, sql\n  FROM sqlite_master\n WHERE type = 'table'",
+      hints: ['NUDGE 1 \u2014 Open the FILE INDEX below and inspect person, interview, drivers_license.', 'NUDGE 2 \u2014 Also inspect get_fit_now_member and get_fit_now_check_in.', 'FIELD NOTE \u2014 FK arrows show which column points at which table.'],
+      learn: 'A primary key identifies a row. A foreign key points to a row in another table. Read the structure before you write the query.',
+      doubt: null, check: null },
+    { id: 'B4', label: 'LEAD 04 / FIND THE PATTERN', title: 'THE GOLD BAG', ev: 'E3', needs: ['E2', 'E1'],
+      q: 'Which gold member matches Morty and Annabel: bag "48Z\u2026", plate with "H42W", at the gym on Jan 9?',
+      why: 'Three independent clues should converge on one person.',
+      start: "SELECT m.id, m.name, m.membership_status, d.plate_number\n  FROM get_fit_now_member m\n  JOIN person p ON p.id = m.person_id\n  JOIN drivers_license d ON d.id = p.license_id\n WHERE m.membership_status = 'gold'",
+      hints: ['NUDGE 1 \u2014 Membership ids start with 48Z. LIKE with % matches the rest.', 'NUDGE 2 \u2014 plate_number LIKE \'%H42W%\'.', 'FIELD NOTE \u2014 Join get_fit_now_check_in on membership_id to test the Jan 9 claim (20180109).'],
+      learn: 'Filtering on several fields at once turns thousands of rows into a pattern that points at one person.',
+      doubt: 'Matching three clues is strong, but Bowers says someone else is behind it.',
+      check: r => r.rows.length <= 5 && has(r.rows, eq('Jeremy Bowers')) },
+    { id: 'B5', label: 'LEAD 05 / REBUILD THE NIGHT', title: 'WHO PAID HIM?', ev: 'E4', needs: ['E3'],
+      q: 'Use Bowers\u2019 statement: find the person matching his description who attended the SQL Symphony Concert 3 times in December 2017.',
+      why: 'Counting rows turns many check-ins into a pattern. Many people attend once. Few attend three times.',
+      start: "SELECT person_id, COUNT(*) AS visits\n  FROM facebook_event_checkin\n WHERE event_name = 'SQL Symphony Concert'\n GROUP BY person_id",
+      hints: ['NUDGE 1 \u2014 Keep only December 2017: date BETWEEN 20171201 AND 20171231. Then HAVING COUNT(*) = 3.', 'NUDGE 2 \u2014 Several people attend 3 times. Join person and drivers_license and apply the description: red hair, Tesla Model S, female, 65\u201367 in.', 'FIELD NOTE \u2014 WHERE filters rows before grouping; HAVING filters groups after counting.'],
+      learn: 'GROUP BY with COUNT turns many rows into one number per group. HAVING keeps only the groups you care about.',
+      doubt: 'An unusual count guides the investigation. By itself it does not prove intent.',
+      check: r => r.rows.length <= 3 && has(r.rows, c => c === 'Miranda Priestly' || c === '99716') &&
+        !has(r.rows, c => c === 'Bryan Pardo' || c === '24556' || c === 'Red Korb' || c === '78881') }
+  ];
+  const SCHEMA_REQUIRED = ['person', 'interview', 'drivers_license', 'get_fit_now_member', 'get_fit_now_check_in'];
+
+  const SUSPECTS = {
+    jeremy: { name: 'Jeremy Bowers', role: 'Gold-tier gym member', unlock: 'E3', note: 'Fits the witnesses. Claims he was hired.' },
+    miranda: { name: 'Miranda Priestly', role: 'Red-haired Tesla owner', unlock: 'E4', note: 'Matches every detail of the description Bowers gave.' },
+    red: { name: 'Red Korb', role: 'Red-haired Tesla owner', unlock: 'E4', note: 'Matches the car and hair, but no 3-concert pattern in December 2017.' },
+    bryan: { name: 'Bryan Pardo', role: 'Concert regular', unlock: 'E4', note: 'Three concert visits, but not the described appearance or car.' }
+  };
+
+  function norm(res) { const t = res && res[0]; return t ? { cols: t.columns, rows: t.values } : { cols: [], rows: [] }; }
+
+  /* returns {ok, code}. code: ok | zero | toomany | noise | bryan */
+  function evaluate(beat, r) {
+    if (!beat.check) return { ok: false, code: 'na' };
+    if (r.rows.length === 0) return { ok: false, code: 'zero' };
+    if (beat.check(r)) return { ok: true, code: 'ok' };
+    if (beat.id === 'B5' && has(r.rows, c => c === 'Bryan Pardo' || c === '24556' || c === 'Red Korb' || c === '78881')) return { ok: false, code: 'decoy' };
+    if (r.rows.length > 10) return { ok: false, code: 'toomany' };
+    return { ok: false, code: 'noise' };
+  }
+
+  function judge(suspect, attached, owned) {
+    if (suspect === 'jeremy') return { status: 'partial', msg: 'Bowers pulled the trigger, but his own statement says a woman hired him. Someone paid him. The case is not closed.' };
+    if (suspect !== 'miranda') return { status: 'wrong', msg: 'The record does not support this accusation. Re-read what each suspect fails to match.' };
+    const miss = ['E3', 'E4'].filter(e => !owned.includes(e) || !attached.includes(e));
+    if (miss.length) return { status: 'incomplete', msg: 'Right direction, but the evidence is not enough. Attach: ' + miss.map(e => EVIDENCE[e].tag).join(', ') + '.' };
+    return { status: 'closed', msg: 'Priestly paid Bowers. The witnesses led to the gym, the gym to Bowers, and his description to the one person who fits all of it.' };
+  }
+
+  function rank(s) {
+    if (s.closed) return 'MASTER DETECTIVE';
+    if (s.done.B5) return 'CASE BUILDER';
+    if (s.done.B4) return 'EVIDENCE ANALYST';
+    if (s.done.B2) return 'PATTERN FINDER';
+    if (s.done.B1) return 'RECORDS SCOUT';
+    return 'ROOKIE';
+  }
+
+  const api = { EVIDENCE, LINKS, BEATS, SCHEMA_REQUIRED, SUSPECTS, norm, evaluate, judge, rank };
+  if (typeof module !== 'undefined') module.exports = api; else root.Case = api;
+})(typeof self !== 'undefined' ? self : this);
+
+(function(){var C=window.Case,$=function(q){return document.querySelector(q)};
+var rows=[["Morty Schapiro", "I heard a gunshot and then saw a man run out. He had a \"Get Fit Now Gym\" bag. The membership number on the bag started with \"48Z\". Only gold members have those bags. The man got into a car with a plate that included \"H42W\"."], ["Annabel Miller", "I saw the murder happen, and I recognized the killer from my gym when I was working out last week on January the 9th."]];
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function dos(box,n){box.textContent='';for(var i=0;i<4;i++){var d=el('div','dos locked');d.appendChild(el('span','ini','?'));d.appendChild(el('b','','PERSON OF INTEREST '+(i+1)));d.appendChild(el('small','','UNIDENTIFIED. The records will name them.'));box.appendChild(d)}}
+dos($('#briefDossiers'));
+var m=$('#meter');['FILE OPENED','RECORDS 3/5','BOARD BUILT','CASE CLOSED'].forEach(function(t,i){m.appendChild(el('li',i<1?'done':i==1?'now':'',t))});
+$('#rank').textContent='PATTERN FINDER';
+var tb=$('#tabs');C.BEATS.forEach(function(b,i){var x=el('button',i<2?'done':'',b.id.replace('B','LEAD 0'));x.setAttribute('aria-selected',i==1);tb.appendChild(x)});
+var b=C.BEATS[1],ms=$('#mission');ms.appendChild(el('p','lab',b.label));ms.appendChild(el('h2','',b.title));ms.appendChild(el('p','',b.q));
+$('#sql').value=b.start;$('#status').textContent='QUERY COMPLETE';
+['person','interview','drivers_license','get_fit_now_member'].forEach(function(n,i){$('#tables').appendChild(el('button',i<2?'seen':'',n))});
+var out=$('#out');out.appendChild(el('div','meta','2 ROWS'));var t=el('table'),h=el('tr');['name','transcript'].forEach(function(x){h.appendChild(el('th','',x))});t.appendChild(h);
+rows.forEach(function(r){var tr=el('tr');r.forEach(function(v){tr.appendChild(el('td','hl',v))});t.appendChild(tr)});out.appendChild(t);
+var rd=$('#reading');rd.hidden=false;rd.className='paper read ok';rd.appendChild(el('span','stampt','RELATIONSHIP FOUND'));rd.appendChild(el('p','',b.learn));rd.appendChild(el('em','',b.doubt));
+$('#ticker').textContent='NEW LEAD: WITNESS STATEMENTS pinned to the board.';
+function slips(box,ids){box.textContent='';ids.forEach(function(id){var e=C.EVIDENCE[id],c=el('div','slip');c.dataset.id=id;c.appendChild(el('div','tag2',id+' · '+e.tag));c.appendChild(el('p','',e.text));c.appendChild(el('div','src','SOURCE: '+e.src));box.appendChild(c)})}
+slips($('#slips'),['E1','E2']);slips($('#closedSlips'),['E3','E4']);
+$('#suspects').appendChild(el('p','empty','Suspects surface as evidence arrives.'));
+$('#closedMsg').textContent='Priestly paid Bowers. The witnesses led to the gym, the gym to Bowers, and his description to the one person who fits all of it.';
+function strings(){var s=$('#strings'),bd=$('#board');if(bd.offsetParent===null)return;s.textContent='';var br=bd.getBoundingClientRect();C.LINKS.forEach(function(l){var A=document.querySelector('#slips .slip[data-id='+l[0]+']'),B=document.querySelector('#slips .slip[data-id='+l[1]+']');if(!A||!B)return;var a=A.getBoundingClientRect(),b=B.getBoundingClientRect(),x1=a.left+a.width/2-br.left,y1=a.bottom-br.top,x2=b.left+b.width/2-br.left,y2=b.top-br.top;var p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d','M'+x1+','+y1+' Q'+((x1+x2)/2+30)+','+((y1+y2)/2)+' '+x2+','+y2);s.appendChild(p)})}
+function show(v){['landing','briefing','office','closed'].forEach(function(x){$('#'+x).hidden=x!==v});$('#top').hidden=v==='landing';scrollTo(0,0);setTimeout(strings,60)}
+document.querySelectorAll('#pv button').forEach(function(b){b.onclick=function(){show(b.dataset.v)}});
+$('#open').onclick=function(){show('briefing')};$('#begin').onclick=function(){show('office')};
+addEventListener('resize',strings);show('landing')})();</script></body>
+</html>
